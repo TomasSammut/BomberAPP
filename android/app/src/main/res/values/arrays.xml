@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="health_permissions">
+        <item>android.permission.health.READ_EXERCISE</item>
+        <item>android.permission.health.READ_SPEED</item>
+        <item>android.permission.health.READ_DISTANCE</item>
+    </array>
+</resources>

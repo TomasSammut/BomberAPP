@@ -1,0 +1,58 @@
+:root {
+  font-family: "Segoe UI", "Trebuchet MS", Verdana, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #f4f1e8;
+  background:
+    radial-gradient(circle at top, rgba(255, 122, 54, 0.18), transparent 30%),
+    linear-gradient(180deg, #12212c 0%, #091117 100%);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #091117;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: transparent;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.25s,
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:focus,
+button:focus-visible {
+  outline: 3px solid rgba(255, 167, 102, 0.6);
+  outline-offset: 2px;
+}

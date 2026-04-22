@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BomberAPP</string>
+    <string name="copy_toast_msg">Link copied to clipboard</string>
+    <string name="custom_url_scheme">com.bomberapp.mobile</string>
+    <string name="fallback_menu_item_copy_link">Copy link</string>
+    <string name="fallback_menu_item_open_in_browser">Open in browser</string>
+    <string name="fallback_menu_item_share_link">Share link</string>
+    <string name="no_webview_text">This app requires a WebView to work</string>
+    <string name="package_name">com.bomberapp.mobile</string>
+    <string name="title_activity_main">BomberAPP</string>
+</resources>

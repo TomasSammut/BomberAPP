@@ -1,0 +1,31 @@
+{
+  "name": "BomberAPP",
+  "short_name": "BomberAPP",
+  "description": "Preparacion de oposiciones de bomberos con calculadora de baremos y seguimiento movil.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#091117",
+  "theme_color": "#13232f",
+  "lang": "es",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

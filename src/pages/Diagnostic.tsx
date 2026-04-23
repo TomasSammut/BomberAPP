@@ -15,7 +15,7 @@ const Diagnostic: React.FC<DiagnosticProps> = ({ profile, onUpdateProfile, onCom
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState(sessionStorage.getItem('gemini_api_key') || '');
+  const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [physicalData, setPhysicalData] = useState<UserPhysicalData>(profile.physicalData || {
     weight: 75,
@@ -63,7 +63,7 @@ const Diagnostic: React.FC<DiagnosticProps> = ({ profile, onUpdateProfile, onCom
   const handleFinish = async () => {
     setIsGenerating(true);
     setError(null);
-    if (apiKey) sessionStorage.setItem('gemini_api_key', apiKey);
+    if (apiKey) localStorage.setItem('gemini_api_key', apiKey);
 
     try {
       const updatedProfile = {

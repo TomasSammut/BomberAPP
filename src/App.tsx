@@ -5,8 +5,6 @@ import { Preferences } from '@capacitor/preferences';
 import './App.css';
 import { calculateScore, tests, oppositions, allScoringCriteria, parseValue } from './scoring';
 import type { TestScore, UserProfile, SessionRecord } from './types';
-import { migrateProfile } from './utils/migrations';
-import { STORAGE_KEYS } from './constants'; // Used in Preferences.set calls
 
 // Import Pages
 import Home from './pages/Home';
@@ -31,6 +29,7 @@ const PageTransition: React.FC<{ children: React.ReactNode }> = ({ children }) =
 );
 
 const AppContent: React.FC<{
+  dailyWOD: string;
   profile: UserProfile;
   big6Stats: TestScore[];
   history: SessionRecord[];
@@ -39,7 +38,7 @@ const AppContent: React.FC<{
   onUpdateStreak: (p: UserProfile) => void;
   onResetData: () => void;
 }> = ({
-  profile, big6Stats, history,
+  dailyWOD, profile, big6Stats, history,
   onUpdateProfile, onSaveSession, onUpdateStreak, onResetData
 }) => {
   const location = useLocation();
@@ -106,6 +105,7 @@ const AppContent: React.FC<{
                   stats={big6Stats}
                   profile={profile}
                   opposition={activeOpposition}
+                  wod={dailyWOD}
                   onUpdateProfile={onUpdateProfile}
                   onResetData={onResetData}
                   history={history}
@@ -208,19 +208,15 @@ const App: React.FC = () => {
   });
   const [history, setHistory] = useState<SessionRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [dailyWOD] = useState('Cargando entrenamiento del día...');
 
   const handleUpdateProfile = useCallback(async (updates: Partial<UserProfile>) => {
     setProfile(prev => {
       const updated = { ...prev, ...updates };
-      try {
-        JSON.stringify(updated);
-        Preferences.set({
-          key: STORAGE_KEYS.PROFILE,
-          value: JSON.stringify(updated),
-        }).catch(err => console.error('Error saving profile:', err));
-      } catch (err) {
-        console.error('Error serializing profile:', err);
-      }
+      Preferences.set({
+        key: 'bomberapp_profile',
+        value: JSON.stringify(updated),
+      });
       return updated;
     });
   }, []);
@@ -397,8 +393,8 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const { value: savedProfile } = await Preferences.get({ key: STORAGE_KEYS.PROFILE });
-        const { value: savedHistory } = await Preferences.get({ key: STORAGE_KEYS.HISTORY });
+        const { value: savedProfile } = await Preferences.get({ key: 'bomberapp_profile' });
+        const { value: savedHistory } = await Preferences.get({ key: 'bomberapp_history' });
         const { value: savedInputs } = await Preferences.get({ key: 'bomberapp_inputs' });
 
         let loadedHistory: SessionRecord[] = [];
@@ -434,12 +430,29 @@ const App: React.FC = () => {
 
         if (savedProfile) {
           try {
-            const { profile: migratedProfile } = migrateProfile(savedProfile);
-            setProfile(prev => ({
-              ...prev,
-              ...migratedProfile
-            }));
-          } catch (e) { console.error("Error migrating profile", e); }
+            const parsed = JSON.parse(savedProfile);
+            if (parsed && typeof parsed === 'object') {
+              // Migration for bestMarks from string to object
+              const migratedBestMarks: Record<string, any> = {};
+              if (parsed.bestMarks) {
+                Object.keys(parsed.bestMarks).forEach(key => {
+                  const val = parsed.bestMarks[key];
+                  if (typeof val === 'string') {
+                    migratedBestMarks[key] = { value: val, timestamp: Date.now() };
+                  } else {
+                    migratedBestMarks[key] = val;
+                  }
+                });
+              }
+
+              setProfile(prev => ({
+                ...prev,
+                ...parsed,
+                bestMarks: migratedBestMarks,
+                targets: parsed.targets || prev.targets || {}
+              }));
+            }
+          } catch (e) { console.error("Error parsing profile", e); }
         }
       } catch (err) {
         console.error("Critical error loading data", err);
@@ -450,128 +463,109 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
-  const recalculateTotalScores = (updatedHistory: SessionRecord[]): SessionRecord[] => {
-    let processed = [...updatedHistory].sort((a, b) => a.timestamp - b.timestamp);
-    const latestKnownScores: Record<string, number> = {};
-
-    return processed.map(record => {
-      if (record.type === 'mark') {
-        record.scores.forEach(s => {
-          latestKnownScores[s.name] = s.score;
-        });
-      }
-      const currentTotal = tests.reduce((sum, t) => sum + (latestKnownScores[t.name] || 0), 0);
-      return { ...record, totalScore: currentTotal };
-    }).sort((a, b) => b.timestamp - a.timestamp).slice(0, 500);
-  };
-
-  const saveMark = useCallback(async (timestamp: number, specificScores: TestScore[]): Promise<'created' | 'updated' | 'deleted' | 'none'> => {
-    const testName = specificScores.length > 0 ? specificScores[0].name : null;
+  const handleSaveSession = useCallback(async (type: 'mark' | 'workout', timestamp?: number, specificScores?: TestScore[], title?: string, rpe?: number, notes?: string, exercises?: any[]) => {
+    const logTime = timestamp || Date.now();
+    const testName = (specificScores && specificScores.length > 0) ? specificScores[0].name : null;
     let actionResult: 'created' | 'updated' | 'deleted' | 'none' = 'none';
 
     setHistory(prevHistory => {
-      const updatedHistory = [...prevHistory];
-      const dateStr = new Date(timestamp).toDateString();
+      let updatedHistory = [...prevHistory];
+      const dateStr = new Date(logTime).toDateString();
+
+      // For 'mark', we find if there's any record on THAT specific day
       const existingIdx = updatedHistory.findIndex(h =>
-        h.type === 'mark' &&
+        h.type === type &&
         new Date(h.timestamp).toDateString() === dateStr
       );
 
-      const activeScores = specificScores.filter(s => s.value && s.value.trim() !== '');
+      if (type === 'mark') {
+        const activeScores = (specificScores || big6Stats).filter(s => s.value && s.value.trim() !== '');
 
-      if (activeScores.length > 0) {
-        if (existingIdx > -1) {
-          const record = { ...updatedHistory[existingIdx] };
-          const newScores = [...record.scores];
-          activeScores.forEach(aS => {
-            const sIdx = newScores.findIndex(s => s.name === aS.name);
-            if (sIdx > -1) newScores[sIdx] = aS;
-            else newScores.push(aS);
-          });
-          record.scores = newScores;
-          updatedHistory[existingIdx] = record;
-          actionResult = 'updated';
-        } else {
-          const newRecord: SessionRecord = {
-            id: timestamp.toString() + (testName ? `_${testName}` : ''),
-            timestamp,
-            type: 'mark',
-            totalScore: 0,
-            scores: activeScores,
-            gender: profile.gender
-          };
-          updatedHistory.push(newRecord);
-          actionResult = 'created';
-        }
-      } else if (existingIdx > -1) {
-        const record = { ...updatedHistory[existingIdx] };
-        if (testName) {
-          record.scores = record.scores.filter(s => s.name !== testName);
-          if (record.scores.length === 0) {
-            updatedHistory.splice(existingIdx, 1);
-          } else {
+        if (activeScores.length > 0) {
+          if (existingIdx > -1) {
+            const record = { ...updatedHistory[existingIdx] };
+            const newScores = [...record.scores];
+            activeScores.forEach(aS => {
+              const sIdx = newScores.findIndex(s => s.name === aS.name);
+              if (sIdx > -1) newScores[sIdx] = aS;
+              else newScores.push(aS);
+            });
+            record.scores = newScores;
             updatedHistory[existingIdx] = record;
+            actionResult = 'updated';
+          } else {
+            const newRecord: SessionRecord = {
+              id: logTime.toString() + (testName ? `_${testName}` : ''),
+              timestamp: logTime,
+              type: 'mark',
+              totalScore: 0,
+              scores: activeScores,
+              gender: profile.gender
+            };
+            updatedHistory.push(newRecord);
+            actionResult = 'created';
           }
-        } else {
-          updatedHistory.splice(existingIdx, 1);
+        } else if (existingIdx > -1) {
+          // If input is empty and record exists, we might want to remove that specific test or the whole record
+          const record = { ...updatedHistory[existingIdx] };
+          if (testName) {
+             record.scores = record.scores.filter(s => s.name !== testName);
+             if (record.scores.length === 0) {
+               updatedHistory.splice(existingIdx, 1);
+             } else {
+               updatedHistory[existingIdx] = record;
+             }
+          } else {
+             updatedHistory.splice(existingIdx, 1);
+          }
+          actionResult = 'deleted';
         }
-        actionResult = 'deleted';
+      } else {
+        // Workout logic...
+        const newRecord: SessionRecord = {
+          id: logTime.toString(),
+          timestamp: logTime,
+          type: 'workout',
+          workoutTitle: title,
+          exercises: exercises,
+          totalScore: 0,
+          scores: [],
+          gender: profile.gender,
+          rpe,
+          notes
+        };
+        updatedHistory.push(newRecord);
+        actionResult = 'created';
       }
 
       if (actionResult !== 'none') {
         Haptics.notification({ type: actionResult === 'deleted' ? NotificationType.Warning : NotificationType.Success });
       }
 
-      const finalHistory = recalculateTotalScores(updatedHistory);
-      try {
-        Preferences.set({ key: STORAGE_KEYS.HISTORY, value: JSON.stringify(finalHistory) }).catch(err => console.error('Error saving history:', err));
-      } catch (err) {
-        console.error('Error serializing history:', err);
-      }
+      // Recalcular totalScore basado en las marcas más recientes
+      let processed = [...updatedHistory].sort((a, b) => a.timestamp - b.timestamp);
+      const latestKnownScores: Record<string, number> = {};
+
+      // Primero, ordenamos cronológicamente para reconstruir el estado de puntos en cada momento
+      processed = processed.map(record => {
+        if (record.type === 'mark') {
+          // Actualizamos los puntos de las pruebas que contenga este registro
+          record.scores.forEach(s => {
+            latestKnownScores[s.name] = s.score;
+          });
+        }
+        // El totalScore de ESTE registro es la suma de lo más reciente hasta este momento
+        const currentTotal = tests.reduce((sum, t) => sum + (latestKnownScores[t.name] || 0), 0);
+        return { ...record, totalScore: currentTotal };
+      });
+
+      const finalHistory = processed.sort((a, b) => b.timestamp - a.timestamp).slice(0, 500);
+      Preferences.set({ key: 'bomberapp_history', value: JSON.stringify(finalHistory) });
       return finalHistory;
     });
 
     return actionResult;
-  }, [profile.gender]);
-
-  const saveWorkout = useCallback(async (timestamp: number, title: string, rpe?: number, notes?: string, exercises?: any[]): Promise<'created' | 'updated' | 'deleted' | 'none'> => {
-    setHistory(prevHistory => {
-      const updatedHistory = [...prevHistory];
-      const newRecord: SessionRecord = {
-        id: timestamp.toString(),
-        timestamp,
-        type: 'workout',
-        workoutTitle: title,
-        exercises,
-        totalScore: 0,
-        scores: [],
-        gender: profile.gender,
-        rpe,
-        notes
-      };
-      updatedHistory.push(newRecord);
-      Haptics.notification({ type: NotificationType.Success });
-
-      const finalHistory = recalculateTotalScores(updatedHistory);
-      try {
-        Preferences.set({ key: STORAGE_KEYS.HISTORY, value: JSON.stringify(finalHistory) }).catch(err => console.error('Error saving history:', err));
-      } catch (err) {
-        console.error('Error serializing history:', err);
-      }
-      return finalHistory;
-    });
-
-    return 'created';
-  }, [profile.gender]);
-
-  const handleSaveSession = useCallback(async (type: 'mark' | 'workout', timestamp?: number, specificScores?: TestScore[], title?: string, rpe?: number, notes?: string, exercises?: any[]): Promise<'created' | 'updated' | 'deleted' | 'none'> => {
-    const logTime = timestamp || Date.now();
-    if (type === 'mark') {
-      return saveMark(logTime, specificScores || []);
-    } else {
-      return saveWorkout(logTime, title || '', rpe, notes, exercises);
-    }
-  }, [saveMark, saveWorkout]);
+  }, [profile.gender, big6Stats]);
 
   const handleResetData = useCallback(async () => {
     if (window.confirm('¿Estás seguro de que quieres borrar todos tus datos? Esta acción es irreversible.')) {
@@ -588,6 +582,7 @@ const App: React.FC = () => {
   return (
     <Router>
       <AppContent
+        dailyWOD={dailyWOD}
         profile={{ ...profile, bestMarks }}
         big6Stats={big6Stats}
         history={history}

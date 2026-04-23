@@ -100,12 +100,26 @@ export interface TestCriteria {
   };
 }
 
+export interface Exercise {
+  name: string;
+  target: string;
+  sets?: number;
+  reps_or_time?: string;
+  rest?: string;
+  coach_tip?: string;
+  completed: boolean;
+  category?: string;
+  description?: string;
+  tips?: string | string[];
+  videoUrl?: string;
+}
+
 export interface SessionRecord {
   id: string;
   timestamp: number;
   type: 'mark' | 'workout';
   workoutTitle?: string;
-  exercises?: { name: string; target: string; completed: boolean }[];
+  exercises?: Exercise[];
   totalScore: number;
   scores: TestScore[];
   gender: Gender;

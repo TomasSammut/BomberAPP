@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { TestScore, UserProfile, Opposition } from '../types';
+import type { TestScore, UserProfile, Opposition, SessionRecord } from '../types';
 import SettingsModal from '../components/SettingsModal';
 import { useNavigate } from 'react-router-dom';
 
@@ -7,13 +7,12 @@ interface HomeProps {
   stats: TestScore[];
   profile: UserProfile;
   opposition: Opposition;
-  wod: string;
   onUpdateProfile: (updates: Partial<UserProfile>) => void;
   onResetData: () => void;
-  history: any[];
+  history: SessionRecord[];
 }
 
-const Home: React.FC<HomeProps> = ({ stats, profile, opposition, wod, onUpdateProfile, onResetData, history }) => {
+const Home: React.FC<HomeProps> = ({ stats, profile, opposition, onUpdateProfile, onResetData, history }) => {
   const navigate = useNavigate();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -112,7 +111,7 @@ const Home: React.FC<HomeProps> = ({ stats, profile, opposition, wod, onUpdatePr
               VER PLAN ➔
             </button>
           </div>
-          <p style={{ fontSize: '20px', fontWeight: '800', margin: '5px 0', color: 'white' }}>{wod}</p>
+          <p style={{ fontSize: '20px', fontWeight: '800', margin: '5px 0', color: 'white' }}>Mi Entrenamiento</p>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>Pulsa para ver detalles de los ejercicios y herramientas.</p>
         </section>
 

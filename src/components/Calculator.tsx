@@ -12,6 +12,7 @@ const Calculator: React.FC<CalculatorProps> = ({ profile, history, onSaveSession
   const [editingTest, setEditingTest] = useState<string | null>(null);
   const [localInputValue, setLocalInputValue] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [inputError, setInputError] = useState<string>('');
 
   // Obtener las marcas más recientes (Globales)
   const latestMarks = useMemo(() => {
@@ -52,12 +53,42 @@ const Calculator: React.FC<CalculatorProps> = ({ profile, history, onSaveSession
     }
   }, [selectedDate, editingTest, dayInputs]);
 
+  const validateInput = (testName: string, value: string): string => {
+    if (value.trim() === '') return '';
+    const test = tests.find(t => t.name === testName);
+    if (!test) return 'Test not found';
+
+    if (test.unit === 'reps') {
+      if (!/^\d+$/.test(value)) return 'Must be a whole number';
+      const num = parseInt(value, 10);
+      if (num < 0 || num > 200) return 'Value between 0-200';
+    } else if (test.unit === 'seconds' || test.unit === 'time') {
+      if (!/^(\d+:)?\d{1,2}$/.test(value)) return 'Format: MM:SS or SS';
+    } else if (test.unit === 'meters') {
+      if (!/^\d+$/.test(value)) return 'Must be a whole number';
+      const num = parseInt(value, 10);
+      if (num < 0 || num > 5000) return 'Value between 0-5000';
+    } else if (test.unit === 'towerTime') {
+      if (!/^(\d+:)?\d{1,2}$/.test(value)) return 'Format: MM:SS or SS';
+    }
+    return '';
+  };
+
   const handleSave = (testName: string) => {
-    const scoreObj = localInputValue.trim() === ''
+    const trimmedValue = localInputValue.trim();
+    const error = validateInput(testName, trimmedValue);
+
+    if (error) {
+      setInputError(error);
+      return;
+    }
+
+    setInputError('');
+    const scoreObj = trimmedValue === ''
       ? { name: testName, value: '', score: 0 }
       : calculateScore(
           testName,
-          localInputValue,
+          trimmedValue,
           profile.gender,
           profile.activeOppositionId
         );
@@ -160,12 +191,15 @@ const Calculator: React.FC<CalculatorProps> = ({ profile, history, onSaveSession
                       type="text"
                       autoFocus
                       value={localInputValue}
-                      onChange={(e) => setLocalInputValue(e.target.value)}
+                      onChange={(e) => {
+                        setLocalInputValue(e.target.value);
+                        setInputError('');
+                      }}
                       placeholder=""
                       style={{
                         width: '100%',
-                        background: 'white',
-                        border: 'none',
+                        background: inputError ? '#ffebee' : 'white',
+                        border: inputError ? '2px solid var(--error)' : 'none',
                         borderRadius: '8px',
                         color: 'black',
                         fontSize: '20px',
@@ -175,6 +209,11 @@ const Calculator: React.FC<CalculatorProps> = ({ profile, history, onSaveSession
                         textAlign: 'center'
                       }}
                     />
+                    {inputError && (
+                      <div style={{ fontSize: '10px', color: 'var(--error)', fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>
+                        {inputError}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button
                         onClick={() => handleSave(test.name)}

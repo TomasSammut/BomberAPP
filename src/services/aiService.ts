@@ -1,9 +1,8 @@
 import { UserProfile, TestScore, SessionRecord } from '../types';
 import { oppositions, allScoringCriteria } from '../scoring';
 
-// Usamos el modelo exacto de la guía rápida: gemini-flash-latest en v1beta
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
-const MASTER_API_KEY = 'AIzaSyBEfP1dECQran7NNF2zWFtzLW0YjiFgZj0';
+const FALLBACK_API_KEY = (import.meta.env as any).VITE_GEMINI_API_KEY || '';
 
 export async function generateTrainingPlan(
   apiKey: string | null,
@@ -11,7 +10,7 @@ export async function generateTrainingPlan(
   currentStats: TestScore[],
   history: SessionRecord[]
 ) {
-  const finalApiKey = (apiKey && apiKey.length > 5) ? apiKey : MASTER_API_KEY;
+  const finalApiKey = (apiKey && apiKey.length > 5) ? apiKey : FALLBACK_API_KEY;
   const opposition = oppositions.find(o => o.id === profile.activeOppositionId) || oppositions[0];
 
   const birthDate = new Date(profile.physicalData?.birthDate || '1995-01-01');

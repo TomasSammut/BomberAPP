@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useReducer } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Haptics, NotificationType, ImpactStyle } from '@capacitor/haptics';
 import { exerciseLibrary } from '../data/exerciseLibrary';
-import type { UserProfile } from '../types';
+import type { UserProfile, SessionRecord, Exercise } from '../types';
 
 interface Workout {
   dayName: string;
@@ -88,23 +88,23 @@ const initialWeeklyProgram: Record<number, Workout> = {
 };
 
 interface TrainingProps {
-  history: any[];
+  history: SessionRecord[];
   profile: UserProfile;
-  onSaveWorkout: (title: string, rpe?: number, notes?: string, exercises?: any[]) => void;
+  onSaveWorkout: (title: string, rpe?: number, notes?: string, exercises?: Exercise[]) => void;
   onStartDiagnostic: () => void;
 }
 
 const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, onStartDiagnostic }) => {
-  const [, forceUpdate] = useReducer(x => x + 1, 0);
   const [activeTab, setActiveTab] = useState<'plan' | 'hist'>('plan');
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay());
   const [filterType, setFilterType] = useState<string>('all');
   const [showRpeModal, setShowRpeModal] = useState(false);
   const [rpe, setRpe] = useState<number>(7);
   const [notes, setNotes] = useState('');
+  const [completedExercises, setCompletedExercises] = useState<Record<string, Record<number, boolean>>>({});
 
-  const [selectedSession, setSelectedSession] = useState<any | null>(null);
-  const [selectedExercise, setSelectedExercise] = useState<any | null>(null);
+  const [selectedSession, setSelectedSession] = useState<SessionRecord | null>(null);
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
 
   const isPlanConfigured = !!profile.physicalData && !!profile.availability;
 
@@ -163,9 +163,14 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
   };
 
   const confirmCompleteWorkout = () => {
-    onSaveWorkout(currentWorkout.title, rpe, notes, currentWorkout.exercises);
+    const dayKey = currentWorkout.dayName;
+    const dayCompletedState = completedExercises[dayKey] || {};
+    const exercisesWithCompletion = currentWorkout.exercises.map((ex: any, i: number) => ({
+      ...ex,
+      completed: dayCompletedState[i] || false
+    }));
+    onSaveWorkout(currentWorkout.title, rpe, notes, exercisesWithCompletion);
     setShowRpeModal(false);
-    setActiveTab('hist');
     setNotes('');
     setRpe(7);
     Haptics.notification({ type: NotificationType.Success });
@@ -200,13 +205,18 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
               fontSize: '18px',
               fontWeight: '800'
             }}>
-              <span
+              <button
                 onClick={() => setActiveTab('plan')}
+                aria-pressed={activeTab === 'plan'}
                 style={{
+                  background: 'none',
+                  border: 'none',
                   color: activeTab === 'plan' ? 'var(--primary)' : 'rgba(255,255,255,0.2)',
                   cursor: 'pointer',
                   transition: 'all 0.3s',
-                  position: 'relative'
+                  position: 'relative',
+                  padding: 0,
+                  font: 'inherit'
                 }}>
                 Plan
                 {activeTab === 'plan' && (
@@ -223,14 +233,19 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
                     }}
                   />
                 )}
-              </span>
-              <span
+              </button>
+              <button
                 onClick={() => setActiveTab('hist')}
+                aria-pressed={activeTab === 'hist'}
                 style={{
+                  background: 'none',
+                  border: 'none',
                   color: activeTab === 'hist' ? 'var(--primary)' : 'rgba(255,255,255,0.2)',
                   cursor: 'pointer',
                   transition: 'all 0.3s',
-                  position: 'relative'
+                  position: 'relative',
+                  padding: 0,
+                  font: 'inherit'
                 }}>
                 Hist.
                 {activeTab === 'hist' && (
@@ -247,7 +262,7 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
                     }}
                   />
                 )}
-              </span>
+              </button>
             </div>
         </div>
 
@@ -298,9 +313,10 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       {days.map(day => (
-                        <div
+                        <button
                           key={day.id}
                           onClick={() => setSelectedDay(day.id)}
+                          aria-pressed={selectedDay === day.id}
                           style={{
                             width: '42px',
                             height: '42px',
@@ -318,7 +334,7 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
                           }}
                         >
                           {day.label}
-                        </div>
+                        </button>
                       ))}
                     </div>
                 </div>
@@ -363,6 +379,8 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {currentWorkout.exercises.map((ex, i) => {
                       const libraryInfo = exerciseLibrary[ex.name];
+                      const dayKey = currentWorkout.dayName;
+                      const isCompleted = completedExercises[dayKey]?.[i] || false;
                       return (
                         <div key={i}
                           onClick={() => setSelectedExercise(libraryInfo ? { ...libraryInfo, ...ex } : { ...ex })}
@@ -388,32 +406,35 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
                               <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600' }}>{ex.reps_or_time || ex.target}</span>
                             </div>
                           </div>
-                          <div
+                          <button
                               onClick={(e) => {
                                   e.stopPropagation();
-                                  // Local state update for visual feedback
-                                  const updatedExercises = [...currentWorkout.exercises];
-                                  updatedExercises[i] = { ...ex, completed: !ex.completed };
-                                  // This update should ideally be synced to a local state in Training.tsx
-                                  // For now, we simulate the toggle for the session
-                                  ex.completed = !ex.completed;
+                                  setCompletedExercises(prev => ({
+                                    ...prev,
+                                    [dayKey]: {
+                                      ...(prev[dayKey] || {}),
+                                      [i]: !isCompleted
+                                    }
+                                  }));
                                   Haptics.impact({ style: ImpactStyle.Light });
-                                  forceUpdate();
                               }}
+                              aria-pressed={isCompleted}
                               style={{
                                   width: '28px',
                                   height: '28px',
                                   borderRadius: '10px',
-                                  border: ex.completed ? 'none' : '2px solid rgba(255,255,255,0.2)',
-                                  background: ex.completed ? 'var(--primary)' : 'transparent',
+                                  border: isCompleted ? 'none' : '2px solid rgba(255,255,255,0.2)',
+                                  background: isCompleted ? 'var(--primary)' : 'transparent',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   cursor: 'pointer',
-                                  transition: 'all 0.2s'
+                                  transition: 'all 0.2s',
+                                  padding: 0,
+                                  color: 'black'
                               }}>
-                              {ex.completed && <span style={{ color: 'black', fontSize: '14px', fontWeight: 'bold' }}>✓</span>}
-                          </div>
+                              {isCompleted && <span style={{ fontSize: '14px', fontWeight: 'bold' }}>✓</span>}
+                          </button>
                         </div>
                       );
                     })}
@@ -504,7 +525,7 @@ const Training: React.FC<TrainingProps> = ({ history, profile, onSaveWorkout, on
                         <div style={{ marginBottom: '30px' }}>
                           <h4 style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '900', marginBottom: '10px' }}>CONSEJOS CLAVE</h4>
                           <ul style={{ paddingLeft: '20px', margin: 0 }}>
-                            {selectedExercise.tips.map((tip: string, idx: number) => (
+                            {(Array.isArray(selectedExercise.tips) ? selectedExercise.tips : [selectedExercise.tips]).map((tip: string, idx: number) => (
                               <li key={idx} style={{ fontSize: '13px', color: 'white', marginBottom: '8px', lineHeight: '1.4' }}>{tip}</li>
                             ))}
                           </ul>
